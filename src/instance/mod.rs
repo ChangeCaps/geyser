@@ -30,7 +30,22 @@ macro_rules! create_compute_pipeline {
                 }
             }
 
-            Arc::new(ComputePipeline::new($instance.get_device(), &cs::Shader::load($instance.get_device()).unwrap().main_entry_point(), &()).unwrap())
+            Arc::new(ComputePipeline::new($instance.get_device(), 
+                     &cs::Shader::load($instance.get_device()).unwrap().main_entry_point(), 
+                     &()).unwrap())
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! create_descriptor_set {
+    ([$($buffer:expr)*], $pipeline:expr) => {
+        {
+            use std::sync::Arc;
+
+            let mut set = vulkano::descriptor::descriptor_set::PersistentDescriptorSet::start($pipeline.clone(), 0);
+
+            Arc::new(set$(.add_buffer($buffer.clone()).unwrap())+.build().unwrap())
         }
     };
 }
@@ -63,6 +78,7 @@ impl Instance {
 
     //Interfaces
 
+    ///Get's a clone of the ['vulkano::instance::Instance']
     pub fn get_instance(&self) -> Arc<instance::Instance> {
         self.instance.clone()
     }
@@ -77,7 +93,29 @@ impl Instance {
 
     //Stuff
 
-    pub fn create_buffer_from_data<T: 'static + Sized>(&self, data: Vec<T>) -> Arc<CpuAccessibleBuffer<Vec<T>>> {
-        CpuAccessibleBuffer::from_data(self.get_device(), BufferUsage::all(), data).unwrap()
+    pub fn create_buffer_from_data<T: 'static + Sized>(&self, data: Vec<T>) -> Arc<CpuAccessibleBuffer<[T]>> {
+        CpuAccessibleBuffer::from_iter(self.get_device(), BufferUsage::all(), data.into_iter()).unwrap()
+    }
+    
+    pub fn dispatch<L: 'static, R: 'static, C: 'static>(&self, size: [u32; 3], pipeline: Arc<ComputePipeline<C>>, 
+        set: Arc<descriptor_set::PersistentDescriptorSet<L, R>>)
+        
+        where L: Send + Sync,
+              R: Send + Sync,
+              C: Send + Sync,
+              ComputePipeline<C>: ComputePipelineAbstract,
+              descriptor_set::PersistentDescriptorSet<L, R>: DescriptorSet,
+    {
+        use vulkano::command_buffer::CommandBuffer;
+        use vulkano::sync::GpuFuture;
+
+        let command_buffer = vulkano::command_buffer::AutoCommandBufferBuilder::new(
+            self.get_device(), self.get_queue().family()).unwrap()
+                .dispatch(size, pipeline.clone(), set.clone(), ()).unwrap()
+                .build().unwrap();
+
+        let finished = command_buffer.execute(self.get_queue()).unwrap();
+
+        finished.then_signal_fence_and_flush().unwrap().wait(None).unwrap();
     }
 }
