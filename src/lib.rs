@@ -4,6 +4,7 @@
 //! 
 //! * [`Instance`](instance::Instance)
 //! * [`compute`]
+//! * [`fumarole`]
 //! 
 //! # Example
 //! ```
@@ -51,3 +52,4 @@ pub extern crate vulkano_shaders;
 
 pub mod instance;
 pub mod compute;
+pub mod fumarole;
