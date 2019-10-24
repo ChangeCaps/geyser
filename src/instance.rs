@@ -78,7 +78,7 @@ impl Instance {
 
     //Stuff
 
-    /// Creates a [`Arc`]<[`CpuAccessibleBuffer`]> from the supplied [`Vec`] by calling
+    /// Creates an [`Arc`]<[`CpuAccessibleBuffer`]> from the supplied [`Vec`] by calling
     /// [`CpuAccessibleBuffer::from_iter`]
     pub fn create_buffer_from_data<T: 'static + Sized>(&self, data: Vec<T>) -> Arc<CpuAccessibleBuffer<[T]>> {
         CpuAccessibleBuffer::from_iter(self.get_device(), BufferUsage::all(), data.into_iter()).unwrap()

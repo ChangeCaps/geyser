@@ -1,5 +1,6 @@
 //! This crate aims to make the use of [`vulkano`] quicker and easier when working on small project.
-//! The main things you should look at are:
+//! 
+//! The first pages you should look at are:
 //! 
 //! * [`Instance`](instance::Instance)
 //! * [`compute`]

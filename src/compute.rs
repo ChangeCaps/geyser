@@ -7,7 +7,7 @@ use vulkano::{
     pipeline::*,
 };
 
-/// Creates a [`Arc`](std::sync::Arc)<[`ComputePipeline`](vulkano::pipeline::ComputePipeline)>.
+/// Creates an [`Arc`](std::sync::Arc)<[`ComputePipeline`](vulkano::pipeline::ComputePipeline)>.
 /// It takes the code for the shader as literate sting and an [`Instance`](instance::Instance).
 /// 
 /// # Example
@@ -27,7 +27,7 @@ use vulkano::{
 /// } buf;
 /// 
 /// void main() {
-///     let idx = gl_GlobalInvocationID.x;
+///     uint idx = gl_GlobalInvocationID.x;
 /// 
 ///     buf.data[idx] = idx * 12;
 /// }
@@ -75,7 +75,7 @@ macro_rules! create_compute_pipeline {
 /// } buf;
 /// 
 /// void main() {
-///     let idx = gl_GlobalInvocationID.x;
+///     uint idx = gl_GlobalInvocationID.x;
 /// 
 ///     buf.data[idx] = idx * 12;
 /// }
@@ -99,7 +99,7 @@ macro_rules! create_descriptor_set {
 }
 
 impl Instance {
-    /// Creates a [`AutoCommandBuffer`](vulkano::command_buffer::AutoCommandBuffer), calls 
+    /// Creates an [`AutoCommandBuffer`](vulkano::command_buffer::AutoCommandBuffer), calls 
     /// [`AutoCommandBuffer::execute`](vulkano::command_buffer::CommandBuffer::execute) on it and waits for it to finish. 
     /// 
     /// This **blocks** until the calculation is finished.
