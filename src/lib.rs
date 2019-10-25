@@ -3,8 +3,8 @@
 //! The first pages you should look at are:
 //! 
 //! * [`Instance`](instance::Instance)
-//! * [`compute`]
-//! * [`fumarole`]
+//! * [`cryo`] for GPGPU
+//! * [`fumarole`] for window creation and display
 //! 
 //! # Example
 //! ```
@@ -49,8 +49,10 @@
 //#![deny(missing_docs)]
 pub extern crate vulkano;
 pub extern crate vulkano_shaders;
+pub extern crate vulkano_win;
+pub extern crate winit;
 
-
+#[macro_use]
 pub mod instance;
-pub mod compute;
+pub mod cryo;
 pub mod fumarole;

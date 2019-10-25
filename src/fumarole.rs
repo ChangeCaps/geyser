@@ -1,4 +1,6 @@
 use vulkano;
+use winit;
+use std::sync::Arc;
 
 #[macro_export]
 macro_rules! entire_window_loop {
@@ -20,7 +22,6 @@ macro_rules! entire_window_loop {
                 depth_stencil: {}
             }
         ).unwrap());
-
 
         let verts = vec![
             Vertex2::new(-1.0, -1.0),
@@ -71,6 +72,7 @@ void main() {
     };
 }
 
+///This 
 #[derive(Default, Copy, Clone)]
 pub struct Vertex2 {
     position: [f32; 2],
@@ -92,4 +94,9 @@ impl From<[f32; 2]> for Vertex2 {
             position: vert,
         }
     }
+}
+
+pub struct Cryo {
+    events_loop: winit::EventsLoop,
+    surface: Arc<vulkano::swapchain::Surface<winit::Window>>,
 }

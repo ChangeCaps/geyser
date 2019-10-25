@@ -2,9 +2,9 @@
 extern crate geyser;
 
 fn main() {
-    use geyser::instance::Instance;
+    use geyser::cryo::Cryo;
  
-    let inst = Instance::new();
+    let inst = Cryo::new();
  
     let pipeline = compute_pipeline!(
         inst, 
