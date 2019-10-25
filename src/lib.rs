@@ -16,8 +16,9 @@
 //! let inst = Instance::new();
 //! 
 //! // Create compute pipeline
-//! let pipeline = create_compute_pipeline!(
-//!     inst, "
+//! let pipeline = compute_pipeline!(
+//!     inst, 
+//!     src: "
 //! #version 450
 //! 
 //! layout(set = 0, binding = 0) buffer Data {
@@ -32,10 +33,10 @@
 //! ");
 //! 
 //! // Create buffer
-//! let buf = inst.create_buffer_from_data(vec![0; 69]);
+//! let buf = inst.buffer_from_data(vec![0; 69]);
 //! 
 //! // Create descriptor set
-//! let set = create_descriptor_set!([buf], pipeline);
+//! let set = descriptor_set!([buf], pipeline);
 //! 
 //! //Run the calculations on the GPU
 //! inst.dispatch([69, 1, 1], pipeline.clone(), set.clone());

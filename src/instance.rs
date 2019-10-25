@@ -5,8 +5,55 @@ use vulkano::{
     device,
     instance,
     buffer::*,
+    descriptor::*,
+    pipeline::*,
 };
 use std::sync::Arc;
+
+
+
+/// Creates an [`Arc`](std::sync::Arc)<[`PersistantDescriptorSet`](vulkano::pipeline::ComputePipeline)> from list of [`buffer`](vulkano::buffer) and a [`pipeline`](vulkano::pipeline)
+/// 
+/// # Example
+/// ```
+/// # #[macro_use]
+/// # extern crate geyser;
+/// use geyser::instance::Instance;
+/// 
+/// let inst = Instance::new();
+/// 
+/// let pipeline = compute_pipeline!(
+///     inst, 
+///     src: "
+/// #version 450
+/// 
+/// layout(set = 0, binding = 0) buffer Data {
+///     uint data[];
+/// } buf;
+/// 
+/// void main() {
+///     uint idx = gl_GlobalInvocationID.x;
+/// 
+///     buf.data[idx] = idx * 12;
+/// }
+/// ");
+/// 
+/// let buf = inst.buffer_from_data(vec![42; 69]);
+/// 
+/// let set = descriptor_set!([buf], pipeline);
+/// ```
+#[macro_export]
+macro_rules! descriptor_set {
+    ([$($buffer:expr),+], $pipeline:expr) => {
+        {
+            use std::sync::Arc;
+
+            let mut set = vulkano::descriptor::descriptor_set::PersistentDescriptorSet::start($pipeline.clone(), 0);
+
+            Arc::new(set$(.add_buffer($buffer.clone()).unwrap())+.build().unwrap())
+        }
+    };
+}
 
 /// This is a struct that holds an [`Arc`]<[`Instance`]>, [`Arc`]<[`Device`](device::Device)> and an [`Arc`]<[`Queue`](device::Device)>.
 /// This serves the purpose of making it easier to create everything needed for your GPU calculations.
@@ -20,7 +67,7 @@ use std::sync::Arc;
 /// 
 /// let inst = Instance::new();
 /// 
-/// let buf = inst.create_buffer_from_data(vec![42; 69]);
+/// let buf = inst.buffer_from_data(vec![42; 69]);
 /// ```
 #[allow(dead_code)]
 pub struct Instance {
@@ -60,19 +107,19 @@ impl Instance {
 
     /// Returns a clone of the [`Arc`]<[`Instance`]>
     /// inside the [`Instance`]
-    pub fn get_instance(&self) -> Arc<instance::Instance> {
+    pub fn instance(&self) -> Arc<instance::Instance> {
         self.instance.clone()
     }
 
     /// Returns a clone of the [`Arc`]<[`Device`](device::Device)>
     /// inside the [`Instance`]
-    pub fn get_device(&self) -> Arc<device::Device> {
+    pub fn device(&self) -> Arc<device::Device> {
         self.device.clone()
     }
 
     /// Returns a clone of the [`Arc`]<[`Queue`](device::Device)>
     /// inside the [`Instance`]
-    pub fn get_queue(&self) -> Arc<device::Queue> {
+    pub fn queue(&self) -> Arc<device::Queue> {
         self.queue.clone()
     }
 
@@ -80,7 +127,33 @@ impl Instance {
 
     /// Creates an [`Arc`]<[`CpuAccessibleBuffer`]> from the supplied [`Vec`] by calling
     /// [`CpuAccessibleBuffer::from_iter`]
-    pub fn create_buffer_from_data<T: 'static + Sized>(&self, data: Vec<T>) -> Arc<CpuAccessibleBuffer<[T]>> {
-        CpuAccessibleBuffer::from_iter(self.get_device(), BufferUsage::all(), data.into_iter()).unwrap()
+    pub fn buffer_from_data<T: 'static + Sized>(&self, data: Vec<T>) -> Arc<CpuAccessibleBuffer<[T]>> {
+        CpuAccessibleBuffer::from_iter(self.device(), BufferUsage::all(), data.into_iter()).unwrap()
+    }
+
+    /// Creates an [`AutoCommandBuffer`](vulkano::command_buffer::AutoCommandBuffer), calls 
+    /// [`AutoCommandBuffer::execute`](vulkano::command_buffer::CommandBuffer::execute) on it and waits for it to finish. 
+    /// 
+    /// This **blocks** until the calculation is finished.
+    pub fn dispatch<L: 'static, R: 'static, C: 'static>(&self, size: [u32; 3], pipeline: Arc<ComputePipeline<C>>, 
+        set: Arc<descriptor_set::PersistentDescriptorSet<L, R>>)
+        
+        where L: Send + Sync,
+              R: Send + Sync,
+              C: Send + Sync,
+              ComputePipeline<C>: ComputePipelineAbstract,
+              descriptor_set::PersistentDescriptorSet<L, R>: DescriptorSet,
+    {
+        use vulkano::command_buffer::CommandBuffer;
+        use vulkano::sync::GpuFuture;
+
+        let command_buffer = vulkano::command_buffer::AutoCommandBufferBuilder::new(
+            self.device(), self.queue().family()).unwrap()
+                .dispatch(size, pipeline.clone(), set.clone(), ()).unwrap()
+                .build().unwrap();
+
+        let finished = command_buffer.execute(self.queue()).unwrap();
+
+        finished.then_signal_fence_and_flush().unwrap().wait(None).unwrap();
     }
 }
