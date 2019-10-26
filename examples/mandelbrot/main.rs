@@ -1,5 +1,7 @@
 extern crate geyser;
 
+use geyser::instance::Instance;
+
 fn main() {
     let inst = Instance::new();
 
