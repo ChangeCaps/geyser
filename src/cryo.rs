@@ -61,7 +61,7 @@ macro_rules! compute_pipeline {
 
 /// This is a struct that holds an [`Arc`]<[`Instance`]>, [`Arc`]<[`Device`](device::Device)> and an [`Arc`]<[`Queue`](device::Device)>.
 /// This serves the purpose of making it easier to create everything needed for your GPU calculations.
-/// Note that you should try to **never** call [`Instance::new`] more than once!
+/// Note that you should try to **never** call [`Cryo::new`] more than once!
 /// 
 /// Here we initialize vulkan and we create a [`CpuAccessibleBuffer`] containing 69 42s.
 /// # Example

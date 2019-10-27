@@ -88,6 +88,3 @@ pub struct Instance {
     pub(crate) queue: Arc<device::Queue>,
 }
 
-
-
-
