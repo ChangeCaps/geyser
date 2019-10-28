@@ -1,13 +1,13 @@
 extern crate geyser;
 
-use geyser::instance::Instance;
+use geyser::core::*;
 
 fn main() {
-    let inst = Instance::new();
+    let inst = geyser::fumarole::Fumarole::new();
 
-    geyser::entire_window_loop!{
-        inst, path: "examples/mandelbrot/shader.glsl", {
-
-        }
+    geyser::single_pass!{
+        inst, 
+        path: "examples/mandelbrot/shader.glsl", 
+        geyser::fumarole::cover_screen()    
     };
 }

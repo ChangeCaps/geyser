@@ -53,6 +53,6 @@ pub extern crate vulkano_win;
 pub extern crate winit;
 
 #[macro_use]
-pub mod instance;
+pub mod core;
 pub mod cryo;
 pub mod fumarole;

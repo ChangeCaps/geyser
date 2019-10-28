@@ -3,6 +3,7 @@ extern crate geyser;
 
 fn main() {
     use geyser::cryo::Cryo;
+    use geyser::core::*;
  
     let inst = Cryo::new();
  
@@ -26,7 +27,7 @@ void main() {
  
     let set = descriptor_set!([buf], pipeline);
  
-    inst.dispatch([69, 1, 1], pipeline.clone(), set.clone());
+    pipeline.dispatch([69, 1, 1], set.clone());
  
     buf.read().expect("Failed to read from buffer")
         .iter().enumerate().for_each(|(i, x)| println!("Index: {} equals: {}", i, *x));

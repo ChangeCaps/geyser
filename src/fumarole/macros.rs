@@ -1,10 +1,14 @@
+
+
 #[macro_export]
-macro_rules! entire_window_loop {
-    ($instance:expr, $tt:tt: $arg:expr, $loop:block) => {
+macro_rules! single_pass_pipeline {
+    ($fumarole:expr, 
+     $tt:tt: $arg:expr, 
+     $verts:expr) => {
         use geyser::fumarole::Vertex2;
         use std::sync::Arc;
 
-        let render_pass = Arc::new(vulkano::single_pass_renderpass!($instance.device(),
+        let render_pass = Arc::new(vulkano::single_pass_renderpass!($fumarole.device(),
             attachments: {
                 color: {
                     load: Clear,
@@ -19,32 +23,8 @@ macro_rules! entire_window_loop {
             }
         ).unwrap());
 
-        let verts = vec![
-            Vertex2::new(-1.0, -1.0),
-            Vertex2::new(1.0, -1.0),
-            Vertex2::new(-1.0, 1.0),
 
-            Vertex2::new(1.0, 1.0),
-            Vertex2::new(-1.0, 1.0),
-            Vertex2::new(1.0, -1.0),
-        ];
-
-        let vert_buffer = $instance.buffer_from_data(verts);
-
-        mod vs {
-            vulkano_shaders::shader!{
-                ty: "vertex",
-                src: "
-#version 450
-
-layout(location = 0) in vec2 position;
-
-void main() {
-    gl_Position = vec4(position, 0.0, 1.0);
-}
-            "
-            }
-        }
+        let vert_buffer = $fumarole.buffer_from_data($verts);
 
         mod fs {
             vulkano_shaders::shader!{
@@ -53,9 +33,8 @@ void main() {
             }
         }
 
-
-        let vs = vs::Shader::load($instance.device()).expect("failed to create shader module");
-        let fs = fs::Shader::load($instance.device()).expect("failed to create shader module");
+        let vs = $crate::fumarole::default_vertex_shader::Shader::load($fumarole.device()).expect("failed to create shader module");
+        let fs = fs::Shader::load($fumarole.device()).expect("failed to create shader module");
 
         let pipeline = Arc::new(vulkano::pipeline::GraphicsPipeline::start()
             .vertex_input_single_buffer::<Vertex2>()
@@ -63,7 +42,7 @@ void main() {
             .viewports_dynamic_scissors_irrelevant(1)
             .fragment_shader(fs.main_entry_point(), ())
             .render_pass(vulkano::framebuffer::Subpass::from(render_pass.clone(), 0).unwrap())
-            .build($instance.device()).unwrap()
-        );
+            .build($fumarole.device()).unwrap()
+        )
     };
 }

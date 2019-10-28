@@ -1,5 +1,6 @@
 //! This module contains macros and structs for GPGPU
 
+use core::Core;
 use std::sync::Arc;
 use vulkano::{
     instance,
@@ -8,6 +9,14 @@ use vulkano::{
     pipeline::*,
     buffer::*,
 };
+
+
+
+
+
+
+
+
 
 /// Creates an [`Arc`](std::sync::Arc)<[`ComputePipeline`](vulkano::pipeline::ComputePipeline)>.
 /// It takes the code for the shader as literate sting and an [`Instance`](instance::Instance).
@@ -40,7 +49,8 @@ use vulkano::{
 macro_rules! compute_pipeline {
     ($instance:expr, $tt:tt: $source_code:expr) => {
         {
-            use geyser::instance;
+            use geyser::core::Core;
+            use geyser::cryo::Pipeline;
             use geyser::vulkano_shaders;
             use std::sync::Arc;
             use geyser::vulkano::pipeline::ComputePipeline;
@@ -52,12 +62,26 @@ macro_rules! compute_pipeline {
                 }
             }
 
-            Arc::new(ComputePipeline::new($instance.device(), 
+            let pipeline = Arc::new(ComputePipeline::new($instance.device(), 
                      &cs::Shader::load($instance.device()).unwrap().main_entry_point(), 
-                     &()).unwrap())
+                     &()).unwrap());
+
+            Pipeline::new(pipeline, $instance.device(), $instance.queue())
         }
     };
 }
+
+
+
+
+
+
+
+
+
+
+
+
 
 /// This is a struct that holds an [`Arc`]<[`Instance`]>, [`Arc`]<[`Device`](device::Device)> and an [`Arc`]<[`Queue`](device::Device)>.
 /// This serves the purpose of making it easier to create everything needed for your GPU calculations.
@@ -75,7 +99,9 @@ macro_rules! compute_pipeline {
 /// ```
 #[allow(dead_code)]
 pub struct Cryo {
-    instance: crate::instance::Instance,
+    instance: Arc<instance::Instance>,
+    device: Arc<device::Device>,
+    queue: Arc<device::Queue>,
 }
 
 #[allow(dead_code)]
@@ -99,19 +125,55 @@ impl Cryo {
 
 
         Cryo {
-            instance: crate::instance::Instance {
-                instance,
-                device,
-                queue,
-            }
+            instance,
+            device,
+            queue,
         }
+    }
+}
+
+impl_core!(Cryo);
+
+
+
+
+
+
+
+
+
+
+
+// Pipeline struct
+
+#[derive(Clone)]
+pub struct Pipeline<C> 
+    where Arc<ComputePipeline<C>>: Clone
+{
+    pipeline: Arc<ComputePipeline<C>>,
+    device: Arc<device::Device>,
+    queue: Arc<device::Queue>,
+}
+
+impl<C: 'static> Pipeline<C> {
+
+    pub fn new(pipeline: Arc<ComputePipeline<C>>, device: Arc<device::Device>, queue: Arc<device::Queue>) -> Self {
+        Pipeline {
+            pipeline,
+            device,
+            queue,
+        }
+    }
+
+    pub fn pipeline(&self) -> Arc<ComputePipeline<C>> {
+        self.pipeline.clone()
     }
 
     /// Creates an [`AutoCommandBuffer`](vulkano::command_buffer::AutoCommandBuffer), calls 
     /// [`AutoCommandBuffer::execute`](vulkano::command_buffer::CommandBuffer::execute) on it and waits for it to finish. 
     /// 
     /// This **blocks** until the calculation is finished.
-    pub fn dispatch<L: 'static, R: 'static, C: 'static>(&self, size: [u32; 3], pipeline: Arc<ComputePipeline<C>>, 
+    pub fn dispatch<L: 'static, R: 'static>(&self, size: [u32; 3], 
         set: Arc<descriptor_set::PersistentDescriptorSet<L, R>>)
         
         where L: Send + Sync,
@@ -124,14 +186,12 @@ impl Cryo {
         use vulkano::sync::GpuFuture;
 
         let command_buffer = vulkano::command_buffer::AutoCommandBufferBuilder::new(
-            self.device(), self.queue().family()).unwrap()
-                .dispatch(size, pipeline.clone(), set.clone(), ()).unwrap()
+            self.device.clone(), self.queue.clone().family()).unwrap()
+                .dispatch(size, self.pipeline.clone(), set.clone(), ()).unwrap()
                 .build().unwrap();
 
-        let finished = command_buffer.execute(self.queue()).unwrap();
+        let finished = command_buffer.execute(self.queue.clone()).unwrap();
 
         finished.then_signal_fence_and_flush().unwrap().wait(None).unwrap();
     }
 }
-
-impl_instance_functions!(Cryo, instance);
