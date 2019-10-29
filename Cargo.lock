@@ -93,7 +93,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "geyser"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "vulkano 0.14.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "vulkano-shaders 0.14.0 (registry+https://github.com/rust-lang/crates.io-index)",

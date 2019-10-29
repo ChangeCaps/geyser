@@ -1,4 +1,4 @@
-//! This crate aims to make the use of [`vulkano`] quicker and easier when working on small project.
+//! This crate aims to make the use of [`vulkano`] quicker and easier when working on a smaller project.
 //! 
 //! 
 //! # Example
