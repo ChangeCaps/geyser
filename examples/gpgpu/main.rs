@@ -2,8 +2,7 @@
 extern crate geyser;
 
 fn main() {
-    use geyser::cryo::Cryo;
-    use geyser::core::*;
+    use geyser::Cryo;
  
     let inst = Cryo::new();
  
@@ -23,7 +22,7 @@ void main() {
 }
     ");
  
-    let buf = inst.buffer_from_data(vec![0; 69]);
+    let buf = inst.buffer_from_data(vec![0; 69]).unwrap();
  
     let set = descriptor_set!([buf], pipeline);
  

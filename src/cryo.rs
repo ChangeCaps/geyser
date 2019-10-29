@@ -1,6 +1,5 @@
 //! This module contains macros and structs for GPGPU
 
-use core::Core;
 use std::sync::Arc;
 use vulkano::{
     instance,
@@ -10,7 +9,48 @@ use vulkano::{
     buffer::*,
 };
 
+/// Creates an [`Arc`](std::sync::Arc)<[`PersistantDescriptorSet`](vulkano::pipeline::ComputePipeline)> from list of [`buffer`](vulkano::buffer) and a [`pipeline`](vulkano::pipeline)
+/// 
+/// # Example
+/// ```
+/// # #[macro_use]
+/// # extern crate geyser;
+/// use geyser::instance::Instance;
+/// 
+/// let cryo = Cryo::new();
+/// 
+/// let pipeline = compute_pipeline!(
+///     inst, 
+///     src: "
+/// #version 450
+/// 
+/// layout(set = 0, binding = 0) buffer Data {
+///     uint data[];
+/// } buf;
+/// 
+/// void main() {
+///     uint idx = gl_GlobalInvocationID.x;
+/// 
+///     buf.data[idx] = idx * 12;
+/// }
+/// ");
+/// 
+/// let buf = cryo.buffer_from_data(vec![42; 69]);
+/// 
+/// let set = descriptor_set!([buf], pipeline);
+/// ```
+#[macro_export]
+macro_rules! descriptor_set {
+    ([$($buffer:expr),+], $pipeline:expr) => {
+        {
+            use std::sync::Arc;
 
+            let mut set = vulkano::descriptor::descriptor_set::PersistentDescriptorSet::start($pipeline.pipeline(), 0);
+
+            Arc::new(set$(.add_buffer($buffer.clone()).unwrap())+.build().unwrap())
+        }
+    };
+}
 
 
 
@@ -19,15 +59,15 @@ use vulkano::{
 
 
 /// Creates an [`Arc`](std::sync::Arc)<[`ComputePipeline`](vulkano::pipeline::ComputePipeline)>.
-/// It takes the code for the shader as literate sting and an [`Instance`](instance::Instance).
+/// It takes the code for the shader as literate sting and a [`Cryo`].
 /// 
 /// # Example
 /// ```
 /// # #[macro_use]
 /// # extern crate geyser;
-/// use geyser::instance::Instance;
+/// use geyser::Cryo;
 /// 
-/// let inst = Instance::new();
+/// let cryo = Cryo::new();
 /// 
 /// let pipeline = compute_pipeline!(
 ///     inst, 
@@ -49,8 +89,7 @@ use vulkano::{
 macro_rules! compute_pipeline {
     ($instance:expr, $tt:tt: $source_code:expr) => {
         {
-            use geyser::core::Core;
-            use geyser::cryo::Pipeline;
+            use geyser::Pipeline;
             use geyser::vulkano_shaders;
             use std::sync::Arc;
             use geyser::vulkano::pipeline::ComputePipeline;
@@ -83,7 +122,7 @@ macro_rules! compute_pipeline {
 
 
 
-/// This is a struct that holds an [`Arc`]<[`Instance`]>, [`Arc`]<[`Device`](device::Device)> and an [`Arc`]<[`Queue`](device::Device)>.
+/// This is a struct that holds an [`Arc`]<[`Instance`](instance::Instance)>, [`Arc`]<[`Device`](device::Device)> and an [`Arc`]<[`Queue`](device::Device)>.
 /// This serves the purpose of making it easier to create everything needed for your GPU calculations.
 /// Note that you should try to **never** call [`Cryo::new`] more than once!
 /// 
@@ -106,7 +145,7 @@ pub struct Cryo {
 
 #[allow(dead_code)]
 impl Cryo {
-    /// Creates a new [`Instance`].
+    /// Initializes vulkan and creates a new [`Cryo`]. This funtion should only be called **once**.
     /// 
     /// It uses the first [`QueueFamily`](instance::QueueFamily) that supports graphics and the first [`Queue`](device::Queue) in that [`QueueFamily`](instance::QueueFamily)
     pub fn new() -> Cryo {
@@ -130,11 +169,28 @@ impl Cryo {
             queue,
         }
     }
+
+    /// Returns a clone on the [`Arc`]<[`Instance`](instance::instance)> in the cryo
+    pub fn instance(&self) -> Arc<instance::Instance> {
+        self.instance.clone()
+    }
+
+    /// Returns a clone on the [`Arc`]<[`Device`](device::Device)> in the cryo
+    pub fn device(&self) -> Arc<device::Device> {
+        self.device.clone()
+    }
+
+    /// Returns a clone on the [`Arc`]<[`Queue`](device::Queue)> in the cryo
+    pub fn queue(&self) -> Arc<device::Queue> {
+        self.queue.clone()
+    }
+
+
+    /// Creates a [`CpuAccessibleBuffer`] containing the data from the supplied [`Vec`] and returns a [`Result`]
+    pub fn buffer_from_data<D: 'static>(&self, data: Vec<D>) -> Result<Arc<CpuAccessibleBuffer<[D]>>, vulkano::memory::DeviceMemoryAllocError> {
+        CpuAccessibleBuffer::from_iter(self.device(), vulkano::buffer::BufferUsage::all(), data.into_iter())
+    }
 }
-
-impl_core!(Cryo);
-
-
 
 
 
@@ -146,6 +202,7 @@ impl_core!(Cryo);
 
 // Pipeline struct
 
+/// Contains 
 #[derive(Clone)]
 pub struct Pipeline<C> 
     where Arc<ComputePipeline<C>>: Clone
