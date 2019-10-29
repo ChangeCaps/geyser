@@ -54,6 +54,73 @@ macro_rules! descriptor_set {
 
 
 
+
+
+/// Creates a module containing a shader.
+///
+/// Note that this macro **only** works when placed outside of any scope.
+/// 
+///
+/// This is useful for dealing with push constants.
+///
+/// * Example
+///
+/// ```
+/// # #[macro_use]
+/// # extern crate geyser;
+/// use geyser::Cryo;
+///
+/// //Use shader
+/// geyser::shader! {
+///     name: TestShader,
+///     src: "
+/// #version 450
+///
+/// layout(push_constant) uniform PushConstantData {
+///     int add;
+/// } pc;
+///
+/// layout(set = 0, binding = 0) buffer Buf {
+///     int data[];
+/// } buf;
+///
+/// void main() {
+///     uint idx = gl_GlobalInvocationID.x;
+///
+///     buf.data[idx] = idx + pc.add;
+/// }
+///     "
+/// }
+///
+/// fn main() {
+///     // Initialize vulkan
+///     let cryo = Cryo::new();
+///
+///     // Create pipeline from the cryo and the shader previously created.
+///     let pipeline = compute_pipeline!{
+///         cryo,
+///         TestShader
+///     };
+///
+///     // Create the push constant struct
+///     let pc = PushConstantData {
+///         add: 42,
+///     };
+/// 
+///     // Create a buffer
+///     let buf = cryo.buffer_from_data(vec![0; 200]);
+///
+///     // Create a descriptor set pointing to the buffer
+///     let set = descriptor_set!([buf], pipeline);
+///
+///     // Dispatch the shader
+///     pipeline.dispatch([200, 1, 1], set.clone(), pc);
+/// 
+///     // Display the result
+///     buf.read().expect("Failed to read from buffer")
+///         .iter().enumerate().for_each(|(i, x)| println!("Index: {} equals: {}", i, *x));
+/// }
+/// ```
 #[macro_export]
 macro_rules! shader {
     (name: $name:ident, $tt:tt: $arg:expr) => {
@@ -230,7 +297,7 @@ impl Cryo {
 
 // Pipeline struct
 
-/// Contains 
+/// Contains an [`Arc`]<[`ComputePipeline`]>. This is used for sending jobs to the GPU.
 #[derive(Clone)]
 pub struct Pipeline<C> 
     where Arc<ComputePipeline<C>>: Clone
@@ -241,7 +308,7 @@ pub struct Pipeline<C>
 }
 
 impl<C: 'static> Pipeline<C> {
-
+    /// Creates a new [`Pipeline`].
     pub fn new(pipeline: Arc<ComputePipeline<C>>, device: Arc<device::Device>, queue: Arc<device::Queue>) -> Self {
         Pipeline {
             pipeline,
@@ -250,6 +317,7 @@ impl<C: 'static> Pipeline<C> {
         }
     }
 
+    /// Returns the [`Arc`]<[`ComputePipeline`]> inside the [`Pipeline`].
     pub fn pipeline(&self) -> Arc<ComputePipeline<C>> {
         self.pipeline.clone()
     }
