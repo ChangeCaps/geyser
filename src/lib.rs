@@ -10,10 +10,10 @@
 //! ```
 //! # #[macro_use]
 //! # extern crate geyser;
-//! use geyser::instance::Instance;
+//! use geyser::cryo::Cryo;
 //! 
 //! // Instantiate vulkano
-//! let inst = Instance::new();
+//! let inst = Cryo::new();
 //! 
 //! // Create compute pipeline
 //! let pipeline = compute_pipeline!(
