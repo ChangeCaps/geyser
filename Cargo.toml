@@ -1,6 +1,6 @@
 [package]
 name = "geyser"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Hjalte Nannestad <hjalte.nannestad@gmail.com>"]
 
 description = "Crate for simpifying the use of vulkano for smaller projects"

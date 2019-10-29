@@ -35,7 +35,7 @@ use vulkano::{
 /// }
 /// ");
 /// 
-/// let buf = cryo.buffer_from_data(vec![42; 69]);
+/// let buf = cryo.buffer_from_data(vec![42; 69]).expect("Failed to create buffer");
 /// 
 /// let set = descriptor_set!([buf], pipeline);
 /// ```
@@ -53,6 +53,20 @@ macro_rules! descriptor_set {
 }
 
 
+
+#[macro_export]
+macro_rules! shader {
+    (name: $name:ident, $tt:tt: $arg:expr) => {
+        mod $name {
+            vulkano_shaders::shader!{
+                ty: "compute",
+                $tt: $arg,
+            }
+        } 
+
+        use $name::ty::*;
+    }
+}
 
 
 
@@ -92,17 +106,31 @@ macro_rules! compute_pipeline {
             use geyser::Pipeline;
             use geyser::vulkano_shaders;
             use std::sync::Arc;
-            use geyser::vulkano::pipeline::ComputePipeline;
+            use geyser::vulkano::pipeline::ComputePipeline; 
 
             mod cs {
-                vulkano_shaders::shader!{
+                vulkano_shaders::shader! {
                     ty: "compute",
-                    $tt: $source_code,
+                    $tt: $source_code
                 }
             }
 
             let pipeline = Arc::new(ComputePipeline::new($instance.device(), 
                      &cs::Shader::load($instance.device()).unwrap().main_entry_point(), 
+                     &()).unwrap());
+
+            Pipeline::new(pipeline, $instance.device(), $instance.queue())
+        }
+    };
+    ($instance:expr, $shader:ident) => {
+        {
+            use geyser::Pipeline;
+            use geyser::vulkano_shaders;
+            use std::sync::Arc;
+            use geyser::vulkano::pipeline::ComputePipeline; 
+
+            let pipeline = Arc::new(ComputePipeline::new($instance.device(), 
+                     &$shader::Shader::load($instance.device()).unwrap().main_entry_point(), 
                      &()).unwrap());
 
             Pipeline::new(pipeline, $instance.device(), $instance.queue())
@@ -230,8 +258,8 @@ impl<C: 'static> Pipeline<C> {
     /// [`AutoCommandBuffer::execute`](vulkano::command_buffer::CommandBuffer::execute) on it and waits for it to finish. 
     /// 
     /// This **blocks** until the calculation is finished.
-    pub fn dispatch<L: 'static, R: 'static>(&self, size: [u32; 3], 
-        set: Arc<descriptor_set::PersistentDescriptorSet<L, R>>)
+    pub fn dispatch<L: 'static, R: 'static, Pc>(&self, size: [u32; 3], 
+        set: Arc<descriptor_set::PersistentDescriptorSet<L, R>>, push_constants: Pc)
         
         where L: Send + Sync,
               R: Send + Sync,
@@ -244,7 +272,7 @@ impl<C: 'static> Pipeline<C> {
 
         let command_buffer = vulkano::command_buffer::AutoCommandBufferBuilder::new(
             self.device.clone(), self.queue.clone().family()).unwrap()
-                .dispatch(size, self.pipeline.clone(), set.clone(), ()).unwrap()
+                .dispatch(size, self.pipeline.clone(), set.clone(), push_constants).unwrap()
                 .build().unwrap();
 
         let finished = command_buffer.execute(self.queue.clone()).unwrap();
