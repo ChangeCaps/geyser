@@ -1,0 +1,38 @@
+[package]
+name = "geyser"
+version = "0.1.0"
+edition = "2024"
+build = "build/main.rs"
+
+[features]
+window = ["dep:raw-window-handle", "dep:ash-window"]
+
+[dependencies.ash]
+version = "0.38"
+features = ["linked"]
+
+[dependencies.tracing]
+version = "0.1"
+
+[dependencies.raw-window-handle]
+version = "0.6"
+optional = true
+
+[dependencies.ash-window]
+version = "0.13"
+optional = true
+
+[dependencies.bitflags]
+version = "2"
+
+[dev-dependencies.geyser]
+version = "0.1.0"
+features = ["window"]
+path = "."
+
+[dev-dependencies.winit] 
+version = "0.30"
+
+[dev-dependencies.tracing-subscriber]
+version = "0.3"
+features = ["env-filter", "fmt"]

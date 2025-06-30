@@ -1,0 +1,18 @@
+// Provided by VK_VERSION_1_0
+typedef enum VkDependencyFlagBits {
+    VK_DEPENDENCY_BY_REGION_BIT = 0x00000001,
+  // Provided by VK_VERSION_1_1
+    VK_DEPENDENCY_DEVICE_GROUP_BIT = 0x00000004,
+  // Provided by VK_VERSION_1_1
+    VK_DEPENDENCY_VIEW_LOCAL_BIT = 0x00000002,
+  // Provided by VK_EXT_attachment_feedback_loop_layout
+    VK_DEPENDENCY_FEEDBACK_LOOP_BIT_EXT = 0x00000008,
+  // Provided by VK_KHR_maintenance8
+    VK_DEPENDENCY_QUEUE_FAMILY_OWNERSHIP_TRANSFER_USE_ALL_STAGES_BIT_KHR = 0x00000020,
+  // Provided by VK_KHR_maintenance9
+    VK_DEPENDENCY_ASYMMETRIC_EVENT_BIT_KHR = 0x00000040,
+  // Provided by VK_KHR_multiview
+    VK_DEPENDENCY_VIEW_LOCAL_BIT_KHR = VK_DEPENDENCY_VIEW_LOCAL_BIT,
+  // Provided by VK_KHR_device_group
+    VK_DEPENDENCY_DEVICE_GROUP_BIT_KHR = VK_DEPENDENCY_DEVICE_GROUP_BIT,
+} VkDependencyFlagBits;
