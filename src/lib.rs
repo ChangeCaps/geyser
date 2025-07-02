@@ -1,35 +1,33 @@
-mod accel;
-mod buffer;
-mod command_buffer;
 mod device;
-mod dynamic_rendering;
-mod extent;
-mod fence;
+mod error;
+mod extent_2d;
+mod extent_3d;
 mod image;
 mod instance;
 mod memory;
+mod physical;
 mod queue;
-mod semaphore;
+mod sharing;
 mod surface;
 mod swapchain;
+mod validation;
 
-pub use accel::*;
-pub use buffer::*;
-pub use command_buffer::*;
 pub use device::*;
-pub use dynamic_rendering::*;
-pub use extent::*;
-pub use fence::*;
+pub use error::*;
+pub use extent_2d::*;
+pub use extent_3d::*;
 pub use image::*;
 pub use instance::*;
 pub use memory::*;
+pub use physical::*;
 pub use queue::*;
-pub use semaphore::*;
+pub use sharing::*;
 pub use surface::*;
 pub use swapchain::*;
+pub use validation::*;
 
 #[cfg(feature = "window")]
-pub mod window;
+mod window;
 
-include!(concat!(env!("OUT_DIR"), "/enums.rs"));
-include!(concat!(env!("OUT_DIR"), "/flags.rs"));
+pub type DeviceAddress = u64;
+pub type DeviceSize = u64;

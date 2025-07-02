@@ -1,161 +1,84 @@
-use std::{borrow::Cow, ffi, fmt, ops::Deref, ptr, sync::Arc};
+use std::{ffi, fmt, sync::Arc};
 
 use ash::vk;
 
-use crate::{Instance, MemoryHeap, MemoryProperties, MemoryType, Queue, RawInstance, Version};
+use crate::{
+    InstanceExtensions, InstanceInner, PhysicalDevice, Queue, QueueInner, Requires, Validated,
+    ValidationError, Version, VulkanError, is_validation_enabled,
+};
 
-#[repr(transparent)]
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub struct DeviceExtension([ffi::c_char; vk::MAX_EXTENSION_NAME_SIZE]);
+include!(concat!(env!("OUT_DIR"), "/device_extensions.rs"));
 
-impl DeviceExtension {
-    pub const KHR_16BIT_STORAGE: Self = Self::new(vk::KHR_16BIT_STORAGE_NAME);
-    pub const KHR_8BIT_STORAGE: Self = Self::new(vk::KHR_8BIT_STORAGE_NAME);
-    pub const KHR_ACCELERATION_STRUCTURE: Self = Self::new(vk::KHR_ACCELERATION_STRUCTURE_NAME);
-    pub const KHR_BUFFER_DEVICE_ADDRESS: Self = Self::new(vk::KHR_BUFFER_DEVICE_ADDRESS_NAME);
-    pub const KHR_DEFERRED_HOST_OPERATIONS: Self = Self::new(vk::KHR_DEFERRED_HOST_OPERATIONS_NAME);
-    pub const KHR_DYNAMIC_RENDERING: Self = Self::new(vk::KHR_DYNAMIC_RENDERING_NAME);
-    pub const KHR_RAY_TRACING_PIPELINE: Self = Self::new(vk::KHR_RAY_TRACING_PIPELINE_NAME);
-    pub const KHR_SHADER_FLOAT_CONTROLS: Self = Self::new(vk::KHR_SHADER_FLOAT_CONTROLS_NAME);
-    pub const KHR_SWAPCHAIN: Self = Self::new(vk::KHR_SWAPCHAIN_NAME);
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub struct DeviceFeatures {
+    pub acceleration_structure: bool,
+}
 
-    pub const EXT_DESCRIPTOR_INDEXING: Self = Self::new(vk::EXT_DESCRIPTOR_INDEXING_NAME);
+#[derive(Clone, Debug)]
+pub struct QueueFamilyDescriptor<'a> {
+    pub family_index: u32,
+    pub priorities: &'a [f32],
+}
 
-    /// Create a new device extension from a static C string.
-    ///
-    /// `Note:` The length of the c string including the null terminator must not exceed
-    /// `vk::MAX_EXTENSION_NAME_SIZE`.
-    pub const fn new(name: &ffi::CStr) -> Self {
-        unsafe { Self::from_raw(name.as_ptr()) }
+#[derive(Clone, Debug, Default)]
+pub struct DeviceDescriptor<'a> {
+    pub queue_families: &'a [QueueFamilyDescriptor<'a>],
+    pub enabled_extensions: DeviceExtensions,
+    pub enabled_features: DeviceFeatures,
+}
+
+pub struct Device {
+    pub(crate) inner: Arc<DeviceInner>,
+}
+
+impl Device {
+    pub fn physical(&self) -> &PhysicalDevice {
+        &self.inner.physical
     }
 
-    /// # Safety
-    /// - `extension` must be a valid C string pointer.
-    pub const unsafe fn from_raw(extension: *const ffi::c_char) -> Self {
-        unsafe {
-            let len = ffi::CStr::from_ptr(extension).count_bytes() + 1;
-            assert!(len <= vk::MAX_EXTENSION_NAME_SIZE);
-
-            let mut array = [0; vk::MAX_EXTENSION_NAME_SIZE];
-            ptr::copy_nonoverlapping(extension, array.as_mut_ptr(), len);
-
-            Self(array)
-        }
-    }
-
-    pub fn as_c_str(&self) -> &ffi::CStr {
-        unsafe { ffi::CStr::from_ptr(self.0.as_ptr()) }
-    }
-
-    pub fn as_ptr(&self) -> *const ffi::c_char {
-        self.0.as_ptr()
+    pub fn enabled_extensions(&self) -> &DeviceExtensions {
+        &self.inner.enabled_extensions
     }
 }
 
-impl fmt::Debug for DeviceExtension {
+impl fmt::Debug for Device {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("DeviceExtension")
-            .field(&self.as_c_str().to_string_lossy())
+        f.debug_struct("Device")
+            .field("handle", &self.inner.handle.handle())
             .finish()
     }
 }
 
-impl fmt::Display for DeviceExtension {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.as_c_str().to_string_lossy())
+pub(crate) struct DeviceInner {
+    pub(crate) handle: ash::Device,
+
+    pub(crate) physical: PhysicalDevice,
+
+    pub(crate) enabled_extensions: DeviceExtensions,
+}
+
+impl DeviceInner {
+    pub(crate) fn instance(&self) -> &Arc<InstanceInner> {
+        &self.physical.inner.instance
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct DeviceExtensionProperties {
-    pub name: DeviceExtension,
-    pub version: Version,
-}
+impl Drop for DeviceInner {
+    fn drop(&mut self) {
+        unsafe {
+            let _ = self.handle.device_wait_idle();
 
-#[derive(Clone, Debug)]
-pub struct QueueDescriptor<'a> {
-    pub family: u32,
-    pub priorities: &'a [f32],
-}
+            tracing::trace!(
+                handle = ?self.handle.handle(),
+                "Destroying Vulkan device"
+            );
 
-impl<'a> QueueDescriptor<'a> {
-    pub const fn new(family: u32, priorities: &'a [f32]) -> Self {
-        Self { family, priorities }
+            self.handle.destroy_device(None);
+        }
     }
-}
-
-#[derive(Debug, Default)]
-pub struct DeviceDescriptor<'a> {
-    pub queues: &'a [QueueDescriptor<'a>],
-    pub extensions: &'a [DeviceExtension],
-    pub dynamic_rendering: bool,
-    pub acceleration_structure: bool,
-    pub buffer_device_address: bool,
-}
-
-/// A physical device represents a Vulkan-capable GPU or other hardware that can execute Vulkan commands.
-pub struct PhysicalDevice {
-    #[allow(dead_code)]
-    instance: Arc<RawInstance>,
-    physical: vk::PhysicalDevice,
-    properties: vk::PhysicalDeviceProperties,
-    families: Vec<vk::QueueFamilyProperties>,
-    extensions: Vec<DeviceExtensionProperties>,
-    memory_types: Vec<MemoryType>,
-    memory_heaps: Vec<MemoryHeap>,
 }
 
 impl PhysicalDevice {
-    /// Get the properties of this physical device.
-    pub fn properties(&self) -> &vk::PhysicalDeviceProperties {
-        &self.properties
-    }
-
-    /// Get the properties of queue families available on this physical device.
-    pub fn queue_families(&self) -> &[vk::QueueFamilyProperties] {
-        &self.families
-    }
-
-    /// Get the number of extensions supported by this physical device.
-    pub fn extensions(&self) -> &[DeviceExtensionProperties] {
-        &self.extensions
-    }
-
-    /// Get the name of this physical device.
-    pub fn name(&self) -> Cow<'_, str> {
-        self.properties
-            .device_name_as_c_str()
-            .unwrap_or_default()
-            .to_string_lossy()
-    }
-
-    /// Get the memory types available on this physical device.
-    pub fn memory_types(&self) -> &[MemoryType] {
-        &self.memory_types
-    }
-
-    /// Get the memory heaps available on this physical device.
-    pub fn memory_heaps(&self) -> &[MemoryHeap] {
-        &self.memory_heaps
-    }
-
-    /// Check if this physical device is a discrete GPU.
-    pub fn is_discrete(&self) -> bool {
-        self.properties().device_type == vk::PhysicalDeviceType::DISCRETE_GPU
-    }
-
-    pub fn is_integrated(&self) -> bool {
-        self.properties().device_type == vk::PhysicalDeviceType::INTEGRATED_GPU
-    }
-
-    pub fn is_virtual(&self) -> bool {
-        self.properties().device_type == vk::PhysicalDeviceType::VIRTUAL_GPU
-    }
-
-    pub fn raw_physical_device(&self) -> vk::PhysicalDevice {
-        self.physical
-    }
-
     #[track_caller]
     pub fn create_device(&self, desc: &DeviceDescriptor<'_>) -> (Device, Vec<Vec<Queue>>) {
         self.try_create_device(desc)
@@ -165,88 +88,96 @@ impl PhysicalDevice {
     pub fn try_create_device(
         &self,
         desc: &DeviceDescriptor<'_>,
-    ) -> Result<(Device, Vec<Vec<Queue>>), vk::Result> {
-        let mut queue_create_infos = Vec::with_capacity(desc.queues.len());
+    ) -> Result<(Device, Vec<Vec<Queue>>), Validated<VulkanError>> {
+        if is_validation_enabled() {
+            self.validate_create_device(desc)?;
+        }
 
-        for queue in desc.queues {
-            let create_info = vk::DeviceQueueCreateInfo {
-                queue_family_index: queue.family,
-                queue_count: queue.priorities.len() as u32,
-                p_queue_priorities: queue.priorities.as_ptr(),
+        unsafe { self.try_create_device_unchecked(desc).map_err(From::from) }
+    }
+
+    /// # Safety
+    /// - The 'queue_families' must not be empty.
+    /// - The `family_index` in each `QueueFamilyDescriptor` must be unique.
+    /// - The `family_index` in each `QueueFamilyDescriptor` must be a valid queue family index for the physical device.
+    /// - The `priorities` in each `QueueFamilyDescriptor` must contain only valid queue priorities (between 0.0 and 1.0).
+    /// - The `priorities` in each `QueueFamilyDescriptor` must not exceed the number of queues in the family.
+    /// - All required extensions for each enabled extension must also be enabled.
+    pub unsafe fn try_create_device_unchecked(
+        &self,
+        desc: &DeviceDescriptor<'_>,
+    ) -> Result<(Device, Vec<Vec<Queue>>), VulkanError> {
+        let mut queue_create_infos = Vec::with_capacity(desc.queue_families.len());
+
+        for family in desc.queue_families {
+            let queue_create_info = vk::DeviceQueueCreateInfo {
+                flags: vk::DeviceQueueCreateFlags::empty(),
+                queue_family_index: family.family_index,
+                queue_count: family.priorities.len() as u32,
+                p_queue_priorities: family.priorities.as_ptr(),
                 ..Default::default()
             };
 
-            queue_create_infos.push(create_info);
+            queue_create_infos.push(queue_create_info);
         }
 
-        let extensions: Vec<_> = desc.extensions.iter().map(|ext| ext.as_ptr()).collect();
-
-        let mut dynamic_rendering = vk::PhysicalDeviceDynamicRenderingFeatures {
-            dynamic_rendering: desc.dynamic_rendering.into(),
-            ..Default::default()
-        };
-
-        let mut acceleration_structure = vk::PhysicalDeviceAccelerationStructureFeaturesKHR {
-            acceleration_structure: desc.acceleration_structure.into(),
-            ..Default::default()
-        };
-
-        let mut buffer_device_address = vk::PhysicalDeviceBufferDeviceAddressFeatures {
-            buffer_device_address: desc.buffer_device_address.into(),
+        let enabled_extensions = desc.enabled_extensions.extension_names();
+        let enabled_features = vk::PhysicalDeviceFeatures {
             ..Default::default()
         };
 
         let create_info = vk::DeviceCreateInfo {
+            flags: vk::DeviceCreateFlags::empty(),
             queue_create_info_count: queue_create_infos.len() as u32,
             p_queue_create_infos: queue_create_infos.as_ptr(),
-            enabled_extension_count: extensions.len() as u32,
-            pp_enabled_extension_names: extensions.as_ptr(),
+            enabled_extension_count: enabled_extensions.len() as u32,
+            pp_enabled_extension_names: enabled_extensions.as_ptr(),
+            p_enabled_features: &enabled_features,
             ..Default::default()
-        }
-        .push_next(&mut dynamic_rendering)
-        .push_next(&mut acceleration_structure)
-        .push_next(&mut buffer_device_address);
+        };
 
-        let raw_device = unsafe {
-            self.instance
-                .instance
-                .create_device(self.physical, &create_info, None)?
+        let handle = unsafe {
+            (self.inner.instance.handle).create_device(self.inner.handle, &create_info, None)?
+        };
+
+        let inner = DeviceInner {
+            handle,
+
+            physical: Self {
+                inner: self.inner.clone(),
+            },
+
+            enabled_extensions: desc.enabled_extensions.clone(),
         };
 
         let device = Device {
-            raw: Arc::new(RawDevice {
-                instance: self.instance.clone(),
-                device: raw_device,
-                physical: Self {
-                    instance: self.instance.clone(),
-                    physical: self.physical,
-                    properties: self.properties,
-                    families: self.families.clone(),
-                    extensions: self.extensions.clone(),
-                    memory_types: self.memory_types.clone(),
-                    memory_heaps: self.memory_heaps.clone(),
-                },
-            }),
+            inner: Arc::new(inner),
         };
 
-        let mut families = Vec::with_capacity(desc.queues.len());
+        let mut families = Vec::new();
 
-        for queue in desc.queues {
-            let mut queues = Vec::with_capacity(queue.priorities.len());
+        for family in desc.queue_families {
+            let mut queues = Vec::new();
 
-            for queue_index in 0..queue.priorities.len() as u32 {
+            for queue_index in 0..family.priorities.len() as u32 {
                 let handle = unsafe {
-                    device
-                        .raw_device()
-                        .get_device_queue(queue.family, queue_index)
+                    (device.inner.handle).get_device_queue(family.family_index, queue_index)
                 };
 
-                queues.push(Queue {
-                    device: device.raw.clone(),
-                    queue: handle,
-                    family: queue.family,
-                    index: queue_index,
-                });
+                let inner = QueueInner {
+                    handle,
+
+                    device: device.inner.clone(),
+
+                    family_index: family.family_index,
+                    queue_index,
+                };
+
+                let queue = Queue {
+                    inner: Arc::new(inner),
+                };
+
+                queues.push(queue);
             }
 
             families.push(queues);
@@ -254,135 +185,84 @@ impl PhysicalDevice {
 
         Ok((device, families))
     }
-}
 
-impl Instance {
-    #[track_caller]
-    pub fn physical_devices(&self) -> Vec<PhysicalDevice> {
-        self.try_physical_devices()
-            .expect("Failed to enumerate physical devices")
-    }
+    fn validate_create_device(&self, desc: &DeviceDescriptor<'_>) -> Result<(), ValidationError> {
+        desc.enabled_extensions.validate(
+            &self.inner.instance.enabled_extensions,
+            self.inner.instance.api_version,
+        )?;
 
-    pub fn try_physical_devices(&self) -> Result<Vec<PhysicalDevice>, vk::Result> {
-        let devices = unsafe { self.raw_instance().enumerate_physical_devices()? };
-        let devices = devices
-            .into_iter()
-            .map(|physical| unsafe {
-                let properties = self.raw_instance().get_physical_device_properties(physical);
-
-                let families = self
-                    .raw_instance()
-                    .get_physical_device_queue_family_properties(physical);
-
-                let extensions = self
-                    .raw_instance()
-                    .enumerate_device_extension_properties(physical)
-                    .into_iter()
-                    .flatten()
-                    .map(|ext| DeviceExtensionProperties {
-                        name: DeviceExtension(ext.extension_name),
-                        version: Version::from_raw(ext.spec_version),
-                    })
-                    .collect();
-
-                let memory_properties = self
-                    .raw_instance()
-                    .get_physical_device_memory_properties(physical);
-
-                let mut memory_types =
-                    Vec::with_capacity(memory_properties.memory_type_count as usize);
-                let mut memory_heaps =
-                    Vec::with_capacity(memory_properties.memory_heap_count as usize);
-
-                for memory_type in memory_properties.memory_types_as_slice() {
-                    memory_types.push(MemoryType {
-                        properties: MemoryProperties::from_bits(
-                            memory_type.property_flags.as_raw(),
-                        )
-                        .expect("Invalid memory properties"),
-                        heap_index: memory_type.heap_index,
-                    });
-                }
-
-                for memory_heap in memory_properties.memory_heaps_as_slice() {
-                    memory_heaps.push(MemoryHeap {
-                        size: memory_heap.size,
-                        device_local: memory_heap
-                            .flags
-                            .contains(vk::MemoryHeapFlags::DEVICE_LOCAL),
-                    });
-                }
-
-                PhysicalDevice {
-                    instance: self.raw.clone(),
-                    physical,
-                    properties,
-                    families,
-                    extensions,
-                    memory_types,
-                    memory_heaps,
-                }
-            })
-            .collect();
-
-        Ok(devices)
-    }
-}
-
-pub struct Device {
-    pub(crate) raw: Arc<RawDevice>,
-}
-
-impl Device {
-    pub fn raw_instance(&self) -> &ash::Instance {
-        &self.raw.instance.instance
-    }
-
-    pub fn raw_device(&self) -> &ash::Device {
-        &self.raw.device
-    }
-
-    pub fn physical(&self) -> &PhysicalDevice {
-        &self.raw.physical
-    }
-
-    #[track_caller]
-    pub fn wait_idle(&self) {
-        self.try_wait_idle()
-            .expect("Failed to wait for device to become idle");
-    }
-
-    pub fn try_wait_idle(&self) -> Result<(), vk::Result> {
-        unsafe { self.raw.device.device_wait_idle() }
-    }
-}
-
-impl fmt::Debug for Device {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Device").finish()
-    }
-}
-
-pub(crate) struct RawDevice {
-    #[allow(dead_code)]
-    pub(crate) physical: PhysicalDevice,
-    pub(crate) instance: Arc<RawInstance>,
-    pub(crate) device: ash::Device,
-}
-
-impl Drop for RawDevice {
-    fn drop(&mut self) {
-        unsafe {
-            tracing::trace!(handle = ?self.device.handle(), "Destroying device");
-            self.device.destroy_device(None);
+        if desc.queue_families.is_empty() {
+            return Err(ValidationError {
+                context: "desc.queue_families".into(),
+                problem: "At least one queue family must be specified.".into(),
+                vuids: &["VUID-VkDeviceCreateInfo-None-10778"],
+                ..Default::default()
+            });
         }
-    }
-}
 
-impl Deref for RawDevice {
-    type Target = ash::Device;
+        for (i, family) in desc.queue_families.iter().enumerate() {
+            if family.family_index >= self.queue_families().len() as u32 {
+                return Err(ValidationError {
+                    context: "desc.queue_families[_].family_index".into(),
+                    problem: "Queue family index is out of bounds for the physical device.".into(),
+                    vuids: &["VUID-VkDeviceQueueCreateInfo-queueFamilyIndex-00381"],
+                    ..Default::default()
+                });
+            }
 
-    fn deref(&self) -> &Self::Target {
-        &self.device
+            if family.priorities.is_empty() {
+                return Err(ValidationError {
+                    context: "desc.queue_families[_].priorities".into(),
+                    problem: "At least one queue priority must be specified.".into(),
+                    vuids: &["VUID-VkDeviceQueueCreateInfo-queueCount-arraylength"],
+                    ..Default::default()
+                });
+            }
+
+            let queue_count =
+                self.queue_families()[family.family_index as usize].queue_count as usize;
+            let count_out_of_bounds = family.priorities.len() > queue_count;
+
+            if count_out_of_bounds {
+                return Err(ValidationError {
+                    context: "desc.queue_families[_].priorities".into(),
+                    problem:
+                        "Number of queue priorities exceeds the number of queues in the family."
+                            .into(),
+                    vuids: &["VUID-VkDeviceQueueCreateInfo-queueCount-00382"],
+                    ..Default::default()
+                });
+            }
+
+            let has_duplicate = desc.queue_families[..i]
+                .iter()
+                .any(|f| f.family_index == family.family_index);
+
+            if has_duplicate {
+                return Err(ValidationError {
+                    context: "desc.queue_families[_].family_index".into(),
+                    problem: "Queue family index must be unique.".into(),
+                    vuids: &["VUID-VkDeviceCreateInfo-queueFamilyIndex-02802"],
+                    ..Default::default()
+                });
+            }
+
+            let priorities_out_of_bounds = family
+                .priorities
+                .iter()
+                .any(|&p| !(0.0..=1.0).contains(&p) || p.is_nan());
+
+            if priorities_out_of_bounds {
+                return Err(ValidationError {
+                    context: "desc.queue_families[_].priorities".into(),
+                    problem: "Queue priorities must be between 0.0 and 1.0.".into(),
+                    vuids: &["VUID-VkDeviceQueueCreateInfo-pQueuePriorities-00383"],
+                    ..Default::default()
+                });
+            }
+        }
+
+        Ok(())
     }
 }

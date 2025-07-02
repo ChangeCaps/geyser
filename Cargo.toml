@@ -2,10 +2,19 @@
 name = "geyser"
 version = "0.1.0"
 edition = "2024"
-build = "build/main.rs"
+build = "build/build.rs"
+
+[workspace]
+members = [
+    "examples/raytrace",
+]
 
 [features]
 window = ["dep:raw-window-handle", "dep:ash-window"]
+unsafe-disable-validation = []
+
+[build-dependencies.xml-rs]
+version = "0.8"
 
 [dependencies.ash]
 version = "0.38"
@@ -24,14 +33,6 @@ optional = true
 
 [dependencies.bitflags]
 version = "2"
-
-[dev-dependencies.geyser]
-version = "0.1.0"
-features = ["window"]
-path = "."
-
-[dev-dependencies.winit] 
-version = "0.30"
 
 [dev-dependencies.tracing-subscriber]
 version = "0.3"

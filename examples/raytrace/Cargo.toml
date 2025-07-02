@@ -1,0 +1,10 @@
+[package]
+name = "raytrace"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+geyser = { path = "../../", features = ["window"] }
+winit = "0.30"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing = "0.1"
